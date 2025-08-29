@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 第二步：安装 Qt 环境
+      # 第二步：安装 Qt 环境（包含 Graphs 组件）
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
@@ -28,6 +28,7 @@ jobs:
           target: 'desktop'
           arch: 'win64_msvc2019_64'
           cache: 'true'
+          modules: 'qtgraphs'
 
       # (新增) 第三步：验证 Qt 环境变量
       # 这个步骤用来打印 QT_DIR 的值，以确认它已被正确设置
