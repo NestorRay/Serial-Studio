@@ -4,10 +4,10 @@ name: Build Serial-Studio for Windows
 # 工作流的触发条件
 on:
   push:
-    branches: [ "main" ] # 当 main 分支有 push 时触发
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ] # 当向 main 分支提交 pull request 时触发
-  workflow_dispatch: # 允许在 Actions 标签页手动触发
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -16,44 +16,46 @@ jobs:
 
     steps:
       # 第一步：检出代码
-      # actions/checkout 是一个标准操作，用于将您的仓库代码下载到运行器中
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 第二步：安装 Qt 环境
-      # 使用社区维护的优秀 Action 来简化 Qt 安装
-      # 它会自动处理下载、配置和路径设置
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.5.2'            # 指定项目所需的 Qt 版本
-          host: 'windows'             # 主机平台
-          target: 'desktop'           # 目标平台
-          arch: 'win64_msvc2019_64' # 指定编译器和架构
-          cache: 'true'               # 启用缓存，可以显著加快后续构建的速度
+          version: '6.5.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          cache: 'true'
 
-      # 第三步：配置 CMake
-      # 创建一个构建目录，然后运行 cmake 来生成构建文件
+      # (新增) 第三步：验证 Qt 环境变量
+      # 这个步骤用来打印 QT_DIR 的值，以确认它已被正确设置
+      - name: Verify Qt Environment
+        run: |
+          echo "QT_DIR is set to: ${{ env.QT_DIR }}"
+          echo "Listing contents of QT_DIR:"
+          dir "${{ env.QT_DIR }}"
+        shell: pwsh # 使用 PowerShell 以获得更一致的跨平台体验
+
+      # 第四步：配置 CMake
       - name: Configure CMake
         run: |
           mkdir build
           cd build
           cmake .. -DQt6_DIR=${{ env.QT_DIR }}/lib/cmake/Qt6 -DCMAKE_BUILD_TYPE=Release -G "Ninja"
-        # 使用 -G "Ninja" 可以加快构建速度，因为 install-qt-action 默认会安装它
 
-      # 第四步：执行编译
-      # 使用 cmake --build 命令来调用底层的构建工具（Ninja 或 MSBuild）
+      # 第五步：执行编译
       - name: Build with CMake
         run: |
           cd build
           cmake --build . --config Release
 
-      # 第五步：上传编译产物
-      # 将编译生成的可执行文件和相关DLL打包成一个 zip 文件
+      # 第六步：上传编译产物
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: serial-studio-windows   # 定义产物的名称
+          name: serial-studio-windows
           path: |
-            build/bin/Release/Serial-Studio.exe # 主程序
-            build/bin/Release/*.dll             # 所有需要的 DLL 文件
+            build/bin/Release/Serial-Studio.exe
+            build/bin/Release/*.dll
