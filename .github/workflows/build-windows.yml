@@ -28,23 +28,28 @@ jobs:
           target: 'desktop'
           arch: 'win64_msvc2019_64'
           cache: 'true'
-          modules: 'qtgraphs'
 
-      # (新增) 第三步：验证 Qt 环境变量
-      # 这个步骤用来打印 QT_DIR 的值，以确认它已被正确设置
-      - name: Verify Qt Environment
+      # 设置 Qt 环境变量，参考 deploy.yml
+      - name: Set Qt Environment Variables
+        shell: pwsh
         run: |
-          echo "QT_DIR is set to: ${{ env.QT_DIR }}"
-          echo "Listing contents of QT_DIR:"
-          dir "${{ env.QT_DIR }}"
-        shell: pwsh # 使用 PowerShell 以获得更一致的跨平台体验
+          $QT_OUTPUT_DIR = "${{ github.workspace }}\Qt-${{ env.QT_VERSION }}-${{ runner.os }}-x64"
+          $QT_BIN_PATH = "$QT_OUTPUT_DIR\${{ env.QT_VERSION }}\msvc2019_64\bin"
+          $QT_LIBEXEC_PATH = "$QT_OUTPUT_DIR\${{ env.QT_VERSION }}\msvc2019_64\libexec"
+          $CMAKE_PREFIX_PATH = "$QT_OUTPUT_DIR\${{ env.QT_VERSION }}\msvc2019_64\lib\cmake"
+          Add-Content -Path $env:GITHUB_ENV -Value "QT_OUTPUT_DIR=$QT_OUTPUT_DIR"
+          Add-Content -Path $env:GITHUB_ENV -Value "QT_BIN_PATH=$QT_BIN_PATH"
+          Add-Content -Path $env:GITHUB_ENV -Value "QT_LIBEXEC_PATH=$QT_LIBEXEC_PATH"
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH"
 
-      # 第四步：配置 CMake
+      # 第四步：配置 CMake，参考 deploy.yml 的路径变量
       - name: Configure CMake
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.CMAKE_PREFIX_PATH }}
         run: |
           mkdir build
           cd build
-          cmake .. -DQt6_DIR=${{ env.QT_DIR }}/lib/cmake/Qt6 -DCMAKE_BUILD_TYPE=Release -G "Ninja"
+          cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja"
 
       # 第五步：执行编译
       - name: Build with CMake
