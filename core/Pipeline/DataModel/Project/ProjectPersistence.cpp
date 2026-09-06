@@ -76,6 +76,7 @@ DataModel::ProjectPersistence::ProjectPersistence(ProjectModel& model)
   : m_model(model)
   , m_autoSaveTimer(new QTimer(this))
   , m_autoSaveSuspended(false)
+  , m_autoSaveHeld(false)
   , m_runtimeDirty(false)
   , m_fileWatcher(new QFileSystemWatcher(this))
   , m_diskCheckPending(false)
@@ -463,7 +464,7 @@ bool DataModel::ProjectPersistence::writeProjectFile(const QString& path)
  */
 void DataModel::ProjectPersistence::autoSave()
 {
-  if (m_autoSaveSuspended)
+  if (m_autoSaveSuspended || m_autoSaveHeld)
     return;
 
   if (m_model.m_filePath.isEmpty() || m_model.m_locked || !m_model.m_modified)
@@ -511,7 +512,7 @@ void DataModel::ProjectPersistence::flushAutoSave()
  */
 void DataModel::ProjectPersistence::scheduleAutoSave()
 {
-  if (m_autoSaveSuspended || m_model.m_filePath.isEmpty() || m_model.m_locked)
+  if (m_autoSaveSuspended || m_autoSaveHeld || m_model.m_filePath.isEmpty() || m_model.m_locked)
     return;
 
   static auto& appState = AppState::instance();
@@ -532,6 +533,25 @@ void DataModel::ProjectPersistence::setAutoSaveSuspended(bool suspend)
   m_autoSaveSuspended = suspend;
   if (suspend)
     stopAutoSaveTimer();
+}
+
+/**
+ * @brief Holds the autosave down outright, flush included: unlike a suspension, which a batch
+ *        lifts and flushes at its end, a hold means the document must not reach disk at all.
+ *        The assistant sets it for the span of a tool call so an edit lands in a checkpoint,
+ *        never in the .ssproj (spec 0075 J2).
+ */
+void DataModel::ProjectPersistence::setAutoSaveHeld(bool held) noexcept
+{
+  m_autoSaveHeld = held;
+}
+
+/**
+ * @brief Returns true while the autosave is held down outright.
+ */
+bool DataModel::ProjectPersistence::autoSaveHeld() const noexcept
+{
+  return m_autoSaveHeld;
 }
 
 /**

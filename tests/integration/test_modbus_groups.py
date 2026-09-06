@@ -170,7 +170,7 @@ def modbus_session(api_client, modbus_server):
     api_client.command("io.modbus.setProtocolIndex", {"protocolIndex": 1})
     api_client.command("io.modbus.setHost", {"host": "127.0.0.1"})
     api_client.command("io.modbus.setPort", {"port": modbus_server.port})
-    api_client.command("io.modbus.setSlaveAddress", {"slaveAddress": 1})
+    api_client.command("io.modbus.setSlaveAddress", {"address": 1})
     api_client.command("io.modbus.setPollInterval", {"pollInterval": POLL_INTERVAL_MS})
     api_client.command("io.modbus.clearRegisterGroups")
     for register_type, start, count in (GROUP_A, GROUP_B):

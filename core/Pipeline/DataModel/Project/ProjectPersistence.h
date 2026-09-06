@@ -59,12 +59,14 @@ public:
 
   void watchProjectFile();
 
+  [[nodiscard]] bool autoSaveHeld() const noexcept;
   [[nodiscard]] bool autoSaveSuspended() const noexcept;
   [[nodiscard]] bool runtimeDirty() const noexcept;
   void setRuntimeDirty(bool dirty) noexcept;
 
   void flushAutoSave();
   void scheduleAutoSave();
+  void setAutoSaveHeld(bool held) noexcept;
   void setAutoSaveSuspended(bool suspend);
   void stopAutoSaveTimer();
   void syncRuntime();
@@ -90,6 +92,7 @@ private:
 
   QTimer* m_autoSaveTimer;
   bool m_autoSaveSuspended;
+  bool m_autoSaveHeld;
   bool m_runtimeDirty;
 
   QFileSystemWatcher* m_fileWatcher;

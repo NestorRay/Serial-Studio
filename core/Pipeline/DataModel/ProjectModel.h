@@ -1175,6 +1175,10 @@ public:
 
   void setAutoSaveSuspended(bool suspend) { m_persistence.setAutoSaveSuspended(suspend); }
 
+  [[nodiscard]] bool autoSaveHeld() const noexcept { return m_persistence.autoSaveHeld(); }
+
+  void setAutoSaveHeld(bool held) noexcept { m_persistence.setAutoSaveHeld(held); }
+
 private:
   void clearTransientState();
   void scheduleWorkspaceRegen();

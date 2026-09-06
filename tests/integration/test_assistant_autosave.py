@@ -7,8 +7,14 @@ through Safe-tier tools.
 
 The contract now: an assistant edit lands in the in-memory document and a checkpoint under the
 backups folder; the file on disk changes only when the user saves, or when the model calls the
-Confirm-tier `project.save`. These tests assert the file's hash, because that is the thing the
-user cares about.
+Confirm-tier `project.save`.
+
+The no-write half of that contract is NOT observable from here: the raw API autosaves a
+file-backed project 1.5 s after any mutating command by design (`project.batch` even reports an
+`autoSaveMode`), and the assistant lane differs only in the autosave hold `Conversation` takes
+around each tool call. That hold is pinned at source level in
+tests/scripts/test_cpp_regressions.py. What this file pins over the API is the rest: the
+explicit save is what writes the file, and the checkpoint the assistant relies on exists.
 
 Requires a running instance with the API server enabled (Settings -> Miscellaneous).
 """
@@ -49,32 +55,17 @@ def saved_project(api_client, temp_dir):
     return path
 
 
-def test_editor_mutation_does_not_touch_the_file(api_client, saved_project):
-    """A project mutation marks the document modified; the file is untouched until a save."""
-    before = file_hash(saved_project)
-
-    api_client.command("project.group.add", {"title": "Added by test", "widgetType": 0})
-    time.sleep(2.0)  # longer than the assistant's 800 ms debounce
-
-    assert file_hash(saved_project) == before, "the document was written without a save"
-
-    status = api_client.command("project.getStatus") or {}
-    assert status.get(
-        "modified", True
-    ), "an unsaved mutation must leave the document modified"
-
-
-def test_explicit_save_is_the_only_write(api_client, saved_project):
-    """project.save is the one explicit, Confirm-tier path that changes the file."""
+def test_explicit_save_writes_the_document(api_client, saved_project):
+    """project.save is the explicit, Confirm-tier path that changes the file."""
     before = file_hash(saved_project)
 
     api_client.command("project.group.add", {"title": "Second group", "widgetType": 0})
-    time.sleep(1.5)
-    assert file_hash(saved_project) == before
-
     api_client.command("project.save")
     time.sleep(1.0)
     assert file_hash(saved_project) != before, "project.save must write the document"
+
+    status = api_client.command("project.getStatus") or {}
+    assert status.get("modified") is False, "a saved document must not stay modified"
 
 
 def test_checkpoints_are_available_after_an_edit(api_client, saved_project):

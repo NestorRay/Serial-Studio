@@ -1792,14 +1792,15 @@ def test_modbus_bit_reads_get_their_own_request_cap():
 # ----------------------------------------------------------------------------------
 
 
-def test_opcua_trust_is_checked_before_the_name_and_the_clock():
+def test_opcua_trust_is_checked_after_the_clock_and_before_the_name():
     """verifyServerCertificate refused on expiry, then not-yet-valid, then hostname, and
     only reached the trust store last. A self-signed controller dialed by IP therefore
     reported HostnameMismatch forever: accepting it in the trust prompt changed nothing,
     because the next attempt was refused before the trust store was consulted.
 
-    Trust pins the exact bytes by SHA-256, so it is now read straight after the
-    parse check and answers Good on its own.
+    Trust pins the exact bytes by SHA-256, so it answers Good ahead of the hostname check.
+    It stays BEHIND the validity window: trusting an expired certificate must not open the
+    channel (spec 0067 AC11, and what the manual promises), so renewal is the only fix.
     """
     session = _read("core/Devices/IO/Drivers/OpcUaSession.cpp")
     fn = re.search(
@@ -1811,16 +1812,18 @@ def test_opcua_trust_is_checked_before_the_name_and_the_clock():
     body = fn.group(0)
 
     trusted = body.index("m_serverCertificate.trusted")
-    for later in (
+    for earlier in (
+        "m_serverCertificate.valid",
         "m_serverCertificate.expired",
         "m_serverCertificate.notYetValid",
-        "m_serverCertificate.hostnameMatches",
     ):
-        assert trusted < body.index(later), f"trust must be read before {later}"
+        assert (
+            body.index(earlier) < trusted
+        ), f"{earlier} must be refused before trust is read"
 
-    assert (
-        body.index("m_serverCertificate.valid") < trusted
-    ), "an unreadable cert stays refused"
+    assert trusted < body.index(
+        "m_serverCertificate.hostnameMatches"
+    ), "trust must be read before the hostname check"
 
 
 def test_opcua_plaintext_password_needs_an_explicit_grant():
@@ -2038,12 +2041,42 @@ def test_reply_handlers_do_not_open_modal_dialogs():
 
 
 def test_assistant_checkpoints_instead_of_writing_the_project():
-    """With auto-approve on, an assistant edit must not reach the .ssproj (J2)."""
+    """With auto-approve on, an assistant edit must not reach the .ssproj (J2).
+
+    The Conversation-side timer was converted to a checkpoint, but every tool call still ran
+    through API::CommandRegistry::execute, which arms the document's own 1.5 s autosave after
+    any mutating command: the file was written behind the user anyway. The synchronous tool
+    lane therefore runs under an autosave hold that autoSave() itself honours, so a batch's
+    end-of-op flush cannot slip past it either.
+    """
     conversation = _read("core/Ui/AI/Conversation.cpp")
     assert (
         "saveJsonFile" not in conversation
     ), "the assistant must not save the document"
     assert 'QStringLiteral("assistant.checkpoint")' in conversation
+    hold = conversation.index("m_project.setAutoSaveHeld(true);")
+    release = conversation.index("m_project.setAutoSaveHeld(held);")
+    dispatch = conversation.index("m_dispatcher->executeCommand(name, arguments)")
+    assert (
+        hold < release < dispatch
+    ), "the hold and its scope guard precede the dispatch"
+
+    persistence = _read("core/Pipeline/DataModel/Project/ProjectPersistence.cpp")
+    auto_save = re.search(
+        r"void DataModel::ProjectPersistence::autoSave\(\)\n\{[\s\S]*?\n\}", persistence
+    )
+    assert auto_save is not None
+    assert "m_autoSaveHeld" in auto_save.group(
+        0
+    ), "a held autosave must not write on flush"
+    schedule = re.search(
+        r"void DataModel::ProjectPersistence::scheduleAutoSave\(\)\n\{[\s\S]*?\n\}",
+        persistence,
+    )
+    assert schedule is not None
+    assert "m_autoSaveHeld" in schedule.group(
+        0
+    ), "a held autosave must not arm the timer"
 
     tiers = json.loads(_read("app/rcc/ai/command_safety.json"))
     assert (

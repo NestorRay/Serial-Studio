@@ -47,6 +47,14 @@ not a `meta.*` call, not read-only, and not one of the explicit file verbs (`pro
 dispatcher. That writes a `Misc::BackupManager` snapshot and returns `{path, label}`. The
 `.ssproj` on disk changes only on a user save or on `project.save`.
 
+The timer alone did not deliver that: every tool call runs through
+`API::CommandRegistry::execute`, which arms the document's own 1.5 s autosave after any mutating
+command, so an assistant edit reached disk anyway (caught by CI 2026-09-05).
+`Conversation::runToolCall` therefore holds it (`ProjectModel::setAutoSaveHeld`, released by a
+scope guard) for the span of the synchronous dispatch. A hold is not a suspension: `project.batch`
+lifts its suspension and flushes at its end, while `ProjectPersistence::autoSave()` honours the
+hold itself, so nothing inside the call can write.
+
 This is a contract the model reads, not just an implementation detail: `project.save`'s and
 `project.setTitle`'s command descriptions and `app/rcc/ai/skills/project_basics.md` all state it,
 because a model told "the runtime auto-saves after every mutating call" will never save the user's
@@ -199,5 +207,7 @@ lane's generation echo), `tst_reply_state_machine` (three backends against `Fake
 `tst_conversation_history`, `tst_conversation_budget`, `tst_conversation_metatools`,
 `tst_chat_digest`, `tst_think_tag_splitter`, `tst_tool_schemas`, `tst_tool_compact`,
 `tst_provider_json`. Source-level regressions live in `tests/scripts/test_cpp_regressions.py`;
-`tests/integration/test_assistant_autosave.py` pins the checkpoint contract end to end (the file
-hash does not move across edits, only `project.save` writes).
+`tests/integration/test_assistant_autosave.py` pins the halves of the checkpoint contract the API
+exposes (`project.save` writes, the checkpoint exists); the no-write half lives in
+`test_cpp_regressions.py`, because the raw API autosaves by design and only the assistant lane holds
+it.

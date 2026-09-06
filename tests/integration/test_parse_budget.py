@@ -343,9 +343,10 @@ class TestParseBudgetFairShare:
             f"in 1.5 s at 10 Hz: {heavy_series}"
         )
         # The delta above is the recovery signal; this only rules out a source that jumps in
-        # one lockstep burst. Kept loose because poll aliasing costs distinct samples on a
-        # loaded runner (CI has produced 5 distinct values on a series that advanced 14).
-        assert _distinct(heavy_series) >= 4, (
+        # one lockstep burst (two distinct values). Kept loose because poll aliasing costs
+        # distinct samples on a loaded runner (CI has produced 5 distinct values on a series
+        # that advanced 14, and the Linux arm64 runner 3 on 2026-09-04).
+        assert _distinct(heavy_series) >= 3, (
             f"heavy source still updating in lockstep steps: "
             f"{_distinct(heavy_series)} distinct values in 1.5 s"
         )

@@ -10,6 +10,7 @@
 
 #include <QByteArray>
 #include <QJsonDocument>
+#include <QScopeGuard>
 
 #include "AI/Assistant.h"
 #include "AI/CommandRegistry.h"
@@ -1015,7 +1016,9 @@ void AI::Conversation::updateToolCallCard(const QString& callId,
 
 /**
  * @brief Executes a single tool call and feeds its result back. Read-only filesystem tools take
- *        the worker lane instead, so a large workspace scan cannot stall the display tick.
+ *        the worker lane, so a large workspace scan cannot stall the display tick. The sync lane
+ *        holds the document autosave, which the API registry arms after every mutating command:
+ *        an assistant edit may cause a checkpoint, never a write to the .ssproj (spec 0075 J2).
  */
 void AI::Conversation::runToolCall(const QString& callId,
                                    const QString& name,
@@ -1039,6 +1042,9 @@ void AI::Conversation::runToolCall(const QString& callId,
   if (runToolCallAsync(callId, name, arguments))
     return;
 
+  const bool held = m_project.autoSaveHeld();
+  m_project.setAutoSaveHeld(true);
+  const auto release = qScopeGuard([this, held] { m_project.setAutoSaveHeld(held); });
   finishToolCall(callId, name, arguments, m_dispatcher->executeCommand(name, arguments));
 }
 
