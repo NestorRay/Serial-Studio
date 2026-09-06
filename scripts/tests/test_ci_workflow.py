@@ -177,14 +177,27 @@ def test_the_test_job_consumes_build_artifacts_not_a_release(ci):
     assert not any("gh release download" in str(step.get("run", "")) for step in steps)
 
 
-def test_the_test_suite_is_not_soft(ci):
-    """continue-on-error on the suite is how master stayed green over failing tests."""
-    for step in _steps(ci["test"]):
-        if step.get("id") == "run_tests":
-            assert "continue-on-error" not in step
-            break
-    else:
-        pytest.fail("the run_tests step is gone")
+def test_the_test_suite_reports_without_gating(ci):
+    """
+    Since 2e3a55533 the suite is continue-on-error by decision: it reports, it does not hold a
+    release. What makes that safe is visibility, so the failure has to surface as a workflow
+    annotation and the hang-capture steps have to keep reading the step outcome; a soft step
+    with neither is how master silently stayed green over failing tests before.
+    """
+    steps = _steps(ci["test"])
+    run_tests = next((step for step in steps if step.get("id") == "run_tests"), None)
+    assert run_tests is not None, "the run_tests step is gone"
+    assert run_tests.get("continue-on-error") is True
+
+    outcome_readers = [
+        step
+        for step in steps
+        if "steps.run_tests.outcome == 'failure'" in str(step.get("if"))
+    ]
+    assert (
+        len(outcome_readers) >= 3
+    ), "annotation plus the two hang-capture steps read the outcome"
+    assert any("::warning" in str(step.get("run", "")) for step in outcome_readers)
 
 
 def test_no_publication_escape_hatch_remains(ci):
